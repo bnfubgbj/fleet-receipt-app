@@ -135,15 +135,16 @@ def update_pm_schedule(plate, record_date, mileage):
     pws.update_cell(row, 7, status)
 
 
-# ---------------- อ่านใบเสร็จด้วย AI (Gemini free tier) ----------------
-def extract_receipt_data(image_bytes, media_type):
+# ---------------- อ่านใบเสร็จด้วย AI (Gemini free tier) — รองรับทั้งรูปภาพและ PDF ----------------
+def extract_receipt_data(file_bytes, mime_type):
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel("gemini-2.5-flash")
 
-    image = Image.open(io.BytesIO(image_bytes))
+    # ส่งไฟล์แบบ blob ตรงๆ ใช้ได้ทั้งรูปภาพ (jpg/png/webp) และ PDF
+    file_part = {"mime_type": mime_type, "data": file_bytes}
 
     response = model.generate_content(
-        [EXTRACTION_PROMPT, image],
+        [file_part, EXTRACTION_PROMPT],
         generation_config={"response_mime_type": "application/json"}
     )
     text = response.text.strip()
@@ -161,26 +162,33 @@ if "image_bytes" not in st.session_state:
     st.session_state.image_bytes = None
 
 uploaded_file = st.file_uploader(
-    "ลากรูปใบเสร็จมาวาง หรือกดเพื่อถ่ายรูป",
-    type=["jpg", "jpeg", "png", "webp"],
+    "ลากรูปใบเสร็จหรือไฟล์ PDF มาวาง หรือกดเพื่อถ่ายรูป",
+    type=["jpg", "jpeg", "png", "webp", "pdf"],
     accept_multiple_files=False
 )
 
 if uploaded_file is not None:
-    image_bytes = uploaded_file.getvalue()
-    media_type = uploaded_file.type
+    file_bytes = uploaded_file.getvalue()
+    mime_type = uploaded_file.type
+    is_pdf = mime_type == "application/pdf"
 
-    if st.session_state.image_bytes != image_bytes:
-        st.session_state.image_bytes = image_bytes
-        st.image(image_bytes, caption="ใบเสร็จที่อัปโหลด", use_container_width=True)
+    if st.session_state.image_bytes != file_bytes:
+        st.session_state.image_bytes = file_bytes
+        if is_pdf:
+            st.info(f"📄 ไฟล์ PDF: {uploaded_file.name} ({len(file_bytes)/1024:.0f} KB)")
+        else:
+            st.image(file_bytes, caption="ใบเสร็จที่อัปโหลด", use_container_width=True)
         with st.spinner("กำลังอ่านข้อมูลจากใบเสร็จ..."):
             try:
-                st.session_state.extracted = extract_receipt_data(image_bytes, media_type)
+                st.session_state.extracted = extract_receipt_data(file_bytes, mime_type)
             except Exception as e:
                 st.error(f"อ่านข้อมูลไม่สำเร็จ: {e}")
                 st.session_state.extracted = {}
     else:
-        st.image(image_bytes, caption="ใบเสร็จที่อัปโหลด", use_container_width=True)
+        if is_pdf:
+            st.info(f"📄 ไฟล์ PDF: {uploaded_file.name} ({len(file_bytes)/1024:.0f} KB)")
+        else:
+            st.image(file_bytes, caption="ใบเสร็จที่อัปโหลด", use_container_width=True)
 
 if st.session_state.extracted is not None:
     st.divider()
