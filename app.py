@@ -138,7 +138,7 @@ def update_pm_schedule(plate, record_date, mileage):
 # ---------------- อ่านใบเสร็จด้วย AI (Gemini free tier) — รองรับทั้งรูปภาพและ PDF ----------------
 def extract_receipt_data(file_bytes, mime_type):
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-flash-latest")
 
     # ส่งไฟล์แบบ blob ตรงๆ ใช้ได้ทั้งรูปภาพ (jpg/png/webp) และ PDF
     file_part = {"mime_type": mime_type, "data": file_bytes}
