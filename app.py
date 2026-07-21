@@ -156,6 +156,33 @@ def mark_vehicle_sold(plate):
         ws.update_cell(cell.row, 6, "ขายแล้ว")  # คอลัมน์ F = สถานะ
 
 
+def update_vehicle(old_plate, new_plate, new_type, new_department):
+    sh = get_spreadsheet()
+    vws = sh.worksheet(SHEET_VEHICLES)
+    cell = vws.find(old_plate)
+    if not cell:
+        raise ValueError("ไม่พบรถคันนี้ในระบบ")
+    vws.update_cell(cell.row, 1, new_plate)
+    vws.update_cell(cell.row, 2, new_type)
+    vws.update_cell(cell.row, 3, new_department)
+
+    if new_plate != old_plate:
+        # เปลี่ยนทะเบียน -> อัปเดตให้ตรงกันในชีตอื่นด้วย
+        pws = sh.worksheet(SHEET_PM)
+        pcell = pws.find(old_plate)
+        if pcell:
+            pws.update_cell(pcell.row, 1, new_plate)
+
+        lws = sh.worksheet(SHEET_LOG)
+        try:
+            matches = lws.findall(old_plate)
+        except Exception:
+            matches = []
+        for m in matches:
+            if m.col == 2:  # คอลัมน์ B = ทะเบียนรถ ใน Maintenance_Log
+                lws.update_cell(m.row, 2, new_plate)
+
+
 def append_maintenance_record(record):
     sh = get_spreadsheet()
     ws = sh.worksheet(SHEET_LOG)
@@ -258,6 +285,8 @@ def render_garage():
         )
 
     st.write("")
+    all_vehicles_incl_sold, _ = get_vehicles_full(include_sold=True)
+    existing_plates_all = {veh["plate"] for veh in all_vehicles_incl_sold}
     cols_per_row = 3
     items = list(vehicles) + [{"plate": None}]  # การ์ดสุดท้าย = เพิ่มรถใหม่
 
@@ -297,6 +326,38 @@ def render_garage():
                     )
                     if st.button("📤 อัปโหลดใบเสร็จ", key=f"select_{v['plate']}", use_container_width=True):
                         go_to_upload(v["plate"])
+
+                    with st.expander("✏️ แก้ไขข้อมูลรถ"):
+                        st.caption("ใช้ตอนเปลี่ยนจากชื่อชั่วคราวเป็นทะเบียนจริง")
+                        new_plate = st.text_input(
+                            "ทะเบียนรถ", value=v["plate"], key=f"edit_plate_{v['plate']}"
+                        )
+                        new_type = st.radio(
+                            "ประเภท", options=VEHICLE_TYPES,
+                            index=VEHICLE_TYPES.index(v["type"]) if v["type"] in VEHICLE_TYPES else 0,
+                            format_func=lambda t: f"{vehicle_icon(t)}  {t}",
+                            horizontal=True, key=f"edit_type_{v['plate']}"
+                        )
+                        dept_options = DEPARTMENTS if v["department"] in DEPARTMENTS else DEPARTMENTS + [v["department"]]
+                        new_department = st.radio(
+                            "แผนก", options=dept_options,
+                            index=dept_options.index(v["department"]) if v["department"] in dept_options else 0,
+                            horizontal=True, key=f"edit_dept_{v['plate']}"
+                        )
+                        if st.button("💾 บันทึกการแก้ไข", key=f"save_edit_{v['plate']}",
+                                      use_container_width=True, disabled=not sheet_connected):
+                            new_plate_clean = new_plate.strip()
+                            if not new_plate_clean:
+                                st.warning("กรุณากรอกทะเบียนรถ")
+                            elif new_plate_clean != v["plate"] and new_plate_clean in existing_plates_all:
+                                st.warning(f"มีทะเบียน {new_plate_clean} อยู่ในระบบแล้ว")
+                            else:
+                                try:
+                                    update_vehicle(v["plate"], new_plate_clean, new_type, new_department)
+                                    st.success("บันทึกการแก้ไขเรียบร้อยแล้ว!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"แก้ไขไม่สำเร็จ: {e}")
 
                     with st.expander("🚫 รถคันนี้ขายไปแล้ว?"):
                         st.caption("รถจะถูกซ่อนออกจากหน้านี้ (ประวัติซ่อมเก่ายังอยู่ครบใน Sheet)")
