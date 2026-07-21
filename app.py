@@ -60,7 +60,11 @@ def get_credentials():
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds_dict = dict(st.secrets["gcp_service_account"])
+    # วิธีง่าย: วางเนื้อหาไฟล์ JSON ทั้งไฟล์ในช่อง GCP_SERVICE_ACCOUNT_JSON
+    if "GCP_SERVICE_ACCOUNT_JSON" in st.secrets:
+        creds_dict = json.loads(st.secrets["GCP_SERVICE_ACCOUNT_JSON"])
+    else:
+        creds_dict = dict(st.secrets["gcp_service_account"])
     return Credentials.from_service_account_info(creds_dict, scopes=scopes)
 
 
